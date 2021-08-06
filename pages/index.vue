@@ -1,77 +1,168 @@
 <template>
-  <v-row justify="center" align="center">
-    <v-col cols="12" sm="8" md="6">
-      <v-card class="logo py-4 d-flex justify-center">
-        <NuxtLogo />
-        <VuetifyLogo />
-      </v-card>
-      <v-card>
-        <v-card-title class="headline">
-          Welcome to the Vuetify + Nuxt.js template
-        </v-card-title>
-        <v-card-text>
-          <p>Vuetify is a progressive Material Design component framework for Vue.js. It was designed to empower developers to create amazing applications.</p>
-          <p>
-            For more information on Vuetify, check out the <a
-              href="https://vuetifyjs.com"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              documentation
-            </a>.
-          </p>
-          <p>
-            If you have questions, please join the official <a
-              href="https://chat.vuetifyjs.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="chat"
-            >
-              discord
-            </a>.
-          </p>
-          <p>
-            Find a bug? Report it on the github <a
-              href="https://github.com/vuetifyjs/vuetify/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="contribute"
-            >
-              issue board
-            </a>.
-          </p>
-          <p>Thank you for developing with Vuetify and I look forward to bringing more exciting features in the future.</p>
-          <div class="text-xs-right">
-            <em><small>&mdash; John Leider</small></em>
-          </div>
-          <hr class="my-3">
-          <a
-            href="https://nuxtjs.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Nuxt Documentation
-          </a>
-          <br>
-          <a
-            href="https://github.com/nuxt/nuxt.js"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Nuxt GitHub
-          </a>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn
-            color="primary"
-            nuxt
-            to="/inspire"
-          >
-            Continue
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-col>
-  </v-row>
+  <div>
+    音声<input type="file" required @change="selectedFile" /><br />
+    <!-- 画像<input id="image" type="file" required /><br /> -->
+    <v-slide-group v-model="model" class="pa-4" mandatory show-arrows>
+      <v-slide-item
+        v-for="imgsrc in imgs"
+        :key="imgsrc"
+        v-slot="{ active, toggle }"
+      >
+        <v-img
+          contain
+          :color="active ? 'primary' : 'grey lighten-1'"
+          class="ma-4"
+          height="150"
+          width="200"
+          :src="imgsrc"
+          @click="toggle"
+        >
+          <v-row class="fill-height" align="center" justify="center">
+            <v-scale-transition>
+              <v-icon
+                v-if="active"
+                color="black"
+                size="48"
+                v-text="'mdi-close-circle-outline'"
+              ></v-icon>
+            </v-scale-transition>
+          </v-row>
+        </v-img>
+      </v-slide-item>
+    </v-slide-group>
+    <v-btn @click="create">音声と画像から動画を作成する</v-btn>
+    {{ conversionMethod }}
+    <p>time:{{ currenttime }}</p>
+    <video v-if="src" id="video" style="width: 70%" controls :src="src"></video>
+  </div>
 </template>
+
+<script lang="ts">
+import Vue from 'vue'
+export type DataType = {
+  src: String
+  currenttime: Number
+  model: any
+  imgs: String[]
+  uploadFile: any
+  conversionMethod: string
+}
+export default Vue.extend({
+  props: {},
+  data(): DataType {
+    return {
+      src: '',
+      currenttime: 0,
+      model: null,
+      conversionMethod: '', // mp4 or wabm
+      uploadFile: null,
+      imgs: [
+        '/carousel/Frame158.png',
+        '/carousel/averuni.png',
+        '/carousel/Frame162.png',
+      ],
+    }
+  },
+  computed: {},
+  created() {
+    this.conversionMethod = this.isAvailableFFmpeg()
+  },
+  methods: {
+    isAvailableFFmpeg() {
+      // console.log('crossOriginIsolated:', crossOriginIsolated)
+      // @ts-igonore
+      // if (!crossOriginIsolated) {
+      //   // Post SharedArrayBuffer
+      //   return 'webm'
+      // }
+      if (!('SharedArrayBuffer' in window)) return 'webm'
+      return 'mp4'
+    },
+    selectedFile(e: any) {
+      // 選択された File の情報を保存しておく
+      e.preventDefault()
+      const files = e.target.files
+      this.uploadFile = files[0]
+    },
+    create() {
+      if (this.uploadFile == null) {
+        alert('ファイルを選択してください')
+        return
+      }
+      this.src = ''
+      const tesimg = this.imgs[this.model]
+      // await fetch('/img/ogp.png').then((response) => {
+      //  return response.blob()
+      // })
+      const testaudio = this.uploadFile // '/sample_averuni/sample_averuni_basic.wav'
+
+      console.log('tesimg:', tesimg)
+      const self = this
+      this.ffmpeg(
+        '-y',
+        '-loop',
+        1,
+        '-i',
+        tesimg,
+        '-i',
+        testaudio,
+        '-pix_fmt',
+        'yuv420p',
+        '-shortest',
+        'out.mp4'
+      ).then((mp4) => {
+        self.src = URL.createObjectURL(mp4)
+      })
+      // .finally(() => (button.disabled = false))
+    },
+    async ffmpeg(...command: any[]) {
+      //   const FFmpeg = require('@ffmpeg/ffmpeg')
+      //   const ffmpeg = createFFmpeg({
+      //     logger: (e) => console.log(e.message)
+      //   })
+      const { createFFmpeg, fetchFile } = require('@ffmpeg/ffmpeg')
+      const ffmpeg = createFFmpeg({
+        // corePath: '/ffmpeg-core',
+
+        corePath: '/ffmpeg-core/ffmpeg-core.js',
+        log: true,
+        progress: (p: any) => (this.currenttime = p.time),
+      })
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load()
+      }
+      // @ts-ignore
+      for (var [i, v] of command.entries()) {
+        if (v instanceof Blob) {
+          ffmpeg.FS(
+            'writeFile',
+            String(i),
+            new Uint8Array(await v.arrayBuffer())
+          )
+          v = i
+        }
+        if (i === 4) {
+          //   console.log('v:', v)
+          const a = await fetch(v).then((response) => {
+            return response.arrayBuffer()
+          })
+          console.log('a:', a)
+          await ffmpeg.FS('writeFile', String(i), new Uint8Array(a))
+          v = i
+        }
+        command[i] = String(v)
+      }
+
+      await ffmpeg.run(...command)
+
+      return new File([ffmpeg.FS('readFile', v).buffer], v)
+    },
+  },
+})
+</script>
+
+<style lang="scss" scoped>
+* {
+  //
+}
+</style>
